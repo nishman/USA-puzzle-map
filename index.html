@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+	<title>Interactive Map of the United States</title>
+
+	<!-- Import D3.js -->
+	<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+
+	<style type="text/css">
+		*{
+			overflow: hidden;
+			margin: 0px;
+			padding: 0px;
+		}
+		.hidden{
+			display: none;
+		}
+
+		#controls{
+			display: inline-block;
+			padding: 20px;
+		}
+	</style>
+</head>
+<body>
+	<script type="text/javascript">
+		// initialize drag counters
+		var dragging = 0,
+			dragged = 0;
+
+		//document Width and height
+		var w = document.documentElement.clientWidth,
+			h = document.documentElement.clientHeight;
+
+		//map projection
+		var projection = d3.geo.albersUsa()
+							   .translate([w/2, h/2])
+							   .scale([w]);
+
+		// generate path and color scale
+		var path = d3.geo.path().projection(projection);
+		var cScale = d3.scale.category10();
+
+		//create svg element
+		var svg = d3.select("body")
+					.append("svg")
+					.attr({
+						width: w,
+						height: h
+					});
+
+		// //space to display state info
+		// var stateNameDisplay = svg.append("g")
+		// 		.attr({
+		// 			"x": w * (0.3),
+		// 			"y": 0,
+		// 			"width": w / 3,
+		// 			"height": h / 10,
+		// 			"fill": "white"
+		// 		});
+
+		//bind data from json file
+		d3.json("states-capitals-coordinates.json", function(error, json){
+			if(error){ console.log(error); }
+
+			// bind state data to svg elements
+			svg.selectAll(".state")
+					.data(json.features)
+					.enter()
+					.append("g")
+						.classed("state", true)
+						.attr("stroke", "grey")
+						.attr("stroke-width", "2px")
+						.append("path")
+						.attr("d", path);
+
+			// initialize dragged property
+			var states = svg.selectAll(".state");
+			for(var i=0; i<states[0].length; i++){
+				states[0][i].__data__.dragged = 0;
+			}
+
+			// initialize dragging, sort by last-dragged-on-top
+			var drag = d3.behavior.drag()
+			    .on("drag", dragmove)
+			    .on("dragstart", function(){
+			    	dragging = 1;
+			    	dragged++;
+			    	d3.select(this)[0][0].__data__.dragged = dragged;
+			    	d3.selectAll(".state").sort(function(a,b){
+			    		return a.dragged - b.dragged;
+			    	});
+			    })
+			    .on("dragend", function(){
+			    	dragging = 0;
+			    });
+
+			// define dragging behavior
+			// drag from the centroid of the state path
+			// while dragging, change colors
+			function dragmove(d) {
+				var centX = path.centroid(d)[0];
+				var centY = path.centroid(d)[1];
+
+				var x = d3.event.sourceEvent.clientX - centX;
+				var y = d3.event.sourceEvent.clientY - centY;
+
+				d3.select(this)
+					.attr({
+						"fill": function(){ return cScale(d.properties.name) },
+						"transform": function(){ return "translate(" + x + "," + y + ")" }
+					})
+					.selectAll("text").attr({
+						"fill": "black",
+						"pointer-events": "none"
+					});
+			}
+
+			// define & bind mouse interactions with svg state elements
+			svg.selectAll(".state")
+				.call(drag)		// bind dragging behavior
+				.on("mouseover", function(d){
+					d3.select(this)
+						.append("text")
+						.attr({
+							"fill": "black",
+							"stroke": "none",
+							"stroke-width": "1px",
+							"x": function(){
+								return path.centroid(d)[0]
+							},
+							"y": function(){
+								return path.centroid(d)[1]
+							},
+							"text-anchor": "middle",
+							"pointer-events": "none"
+						})
+						.text(function(d){
+							return d.properties.capital;
+						});
+
+					// while mouse hovering, show state capital
+					if(!dragging){
+				    	d3.select(this)
+					    	.attr({
+					    		"fill": "white",
+					    		"stroke": "grey",
+					    		"stroke-width": "2px"
+					    	});
+
+						d3.select(this)
+							.append("circle")
+							.attr({
+								"cx": projection([d.properties.capLongitude, d.properties.capLatitude])[0],
+								"cy": projection([d.properties.capLongitude, d.properties.capLatitude])[1],
+								"fill": "red",
+								"r": 3,
+								"stroke": "none"
+							});
+					}
+			    })
+			    // on mouse out, return to black fill
+			    .on("mouseout", function(d){
+			    	d3.select(this)
+				    	.attr({
+				    		"fill":"black"
+				    	});
+
+				    d3.select(this)
+				    	.selectAll("text")
+				    	.classed("hidden", true);
+
+				    d3.select(this)
+				    	.selectAll("circle")
+				    	.classed("hidden", true);
+
+				    svg.selectAll("hidden").remove();
+			    });
+		}); //states-capitals-coordinates.json
+	</script>
+</body>
+</html>
